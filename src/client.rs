@@ -12,14 +12,17 @@ use embedded_io::ErrorType;
 use embedded_io_async::{Read, Write};
 use embedded_nal_async::{Dns, TcpConnect};
 #[cfg(feature = "embedded-tls")]
-use embedded_tls::{
-    Aes128GcmSha256, CryptoProvider, NoClock, SignatureScheme, TlsError, TlsVerifier, pki::CertVerifier,
-};
+use embedded_tls::{CryptoProvider, NoClock, SignatureScheme, TlsError, TlsVerifier, pki::CertVerifier};
 use nourl::{Url, UrlScheme};
 #[cfg(feature = "embedded-tls")]
 use p256::ecdsa::{DerSignature, signature::SignerMut};
 #[cfg(feature = "embedded-tls")]
 use rand_core::CryptoRngCore;
+
+#[cfg(all(feature = "embedded-tls", not(feature = "aes256-sha384")))]
+type DefaultCipher = embedded_tls::Aes128GcmSha256;
+#[cfg(all(feature = "embedded-tls", feature = "aes256-sha384"))]
+type DefaultCipher = embedded_tls::Aes256GcmSha384;
 
 /// An async HTTP client that can establish a TCP connection and perform
 /// HTTP requests.
@@ -59,12 +62,12 @@ pub struct TlsConfig<'a> {
 #[cfg(feature = "embedded-tls")]
 struct Provider {
     rng: rand_chacha::ChaCha8Rng,
-    verifier: CertVerifier<Aes128GcmSha256, NoClock, 4096>,
+    verifier: CertVerifier<DefaultCipher, NoClock, 4096>,
 }
 
 #[cfg(feature = "embedded-tls")]
 impl CryptoProvider for Provider {
-    type CipherSuite = Aes128GcmSha256;
+    type CipherSuite = DefaultCipher;
     type Signature = DerSignature;
 
     fn rng(&mut self) -> impl CryptoRngCore {
@@ -202,7 +205,7 @@ where
                 let rng = ChaCha8Rng::seed_from_u64(tls.seed);
                 let mut config = TlsConfig::new().with_server_name(url.host());
 
-                let mut conn: embedded_tls::TlsConnection<'conn, T::Connection<'conn>, embedded_tls::Aes128GcmSha256> =
+                let mut conn: embedded_tls::TlsConnection<'conn, T::Connection<'conn>, DefaultCipher> =
                     embedded_tls::TlsConnection::new(conn, tls.read_buffer, tls.write_buffer);
 
                 match tls.verify {
@@ -301,7 +304,7 @@ where
     #[cfg(feature = "esp-mbedtls")]
     Tls(esp_mbedtls::asynch::Session<'conn, C>),
     #[cfg(feature = "embedded-tls")]
-    Tls(embedded_tls::TlsConnection<'conn, C, embedded_tls::Aes128GcmSha256>),
+    Tls(embedded_tls::TlsConnection<'conn, C, DefaultCipher>),
     #[cfg(all(not(feature = "embedded-tls"), not(feature = "esp-mbedtls")))]
     Tls((&'conn mut (), core::convert::Infallible)), // Variant is impossible to create, but we need it to avoid "unused lifetime" warning
 }
