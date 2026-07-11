@@ -40,14 +40,8 @@ where
 /// Type for TLS configuration of HTTP client.
 #[cfg(feature = "mbedtls-rs")]
 pub struct TlsConfig<'a, const RX_SIZE: usize = 4096, const TX_SIZE: usize = 4096> {
-    /// Minimum TLS version for the connection
-    version: crate::TlsVersion,
-
-    /// Root certificates to trust. See [mbedtls_rs::Certificates]
-    certificates: crate::Certificate<'a>,
-
-    /// Client certificate and private key for mutual TLS. See [mbedtls_rs::Certificates]
-    client_credentials: Option<crate::Credentials<'a>>,
+    /// Session configuration. See [mbedtls_rs::ClientSessionConfig].
+    session_config: mbedtls_rs::ClientSessionConfig<'a>,
 
     /// A reference to instance of the MbedTLS library.
     tls_reference: mbedtls_rs::TlsReference<'a>,
@@ -130,16 +124,9 @@ impl<'a> TlsConfig<'a> {
 
 #[cfg(feature = "mbedtls-rs")]
 impl<'a, const RX_SIZE: usize, const TX_SIZE: usize> TlsConfig<'a, RX_SIZE, TX_SIZE> {
-    pub fn new(
-        version: crate::TlsVersion,
-        certificates: crate::Certificate<'a>,
-        client_credentials: Option<crate::Credentials<'a>>,
-        tls_reference: crate::TlsReference<'a>,
-    ) -> Self {
+    pub fn new(session_config: mbedtls_rs::ClientSessionConfig<'a>, tls_reference: crate::TlsReference<'a>) -> Self {
         Self {
-            version,
-            certificates,
-            client_credentials,
+            session_config,
             tls_reference,
         }
     }
@@ -194,19 +181,11 @@ where
             if let Some(tls) = self.tls.as_mut() {
                 let mut servername = host.as_bytes().to_vec();
                 servername.push(0);
-                let mut session = mbedtls_rs::Session::new(
-                    tls.tls_reference,
-                    conn,
-                    &mbedtls_rs::SessionConfig::Client(mbedtls_rs::ClientSessionConfig {
-                        ca_chain: Some(tls.certificates.clone()),
-                        creds: tls.client_credentials.clone(),
-                        server_name: None, // don't set it here because it would reference a local variable
-                        auth_mode: mbedtls_rs::AuthMode::Required,
-                        min_version: tls.version,
-                        alpn_protocols: None, // reqwless uses a fixed application layer protocol anyway 
-                    }),
-                )?;
-                session.set_server_name(core::ffi::CStr::from_bytes_with_nul(&servername).unwrap())?;
+                let servername = core::ffi::CStr::from_bytes_with_nul(&servername).map_err(|_| Error::Codec)?;
+
+                let session_config = mbedtls_rs::SessionConfig::Client(tls.session_config.clone());
+                let mut session = mbedtls_rs::Session::new(tls.tls_reference, conn, &session_config)?;
+                session.set_server_name(servername)?;
 
                 session.connect().await?;
                 Ok(HttpConnection::Tls(session))

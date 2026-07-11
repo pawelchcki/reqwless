@@ -69,12 +69,12 @@ let mbedtls_lib_instance = mbedtls_rs::Tls::new(&mut trng).unwrap();
 // For debug messages:
 // mbedtls_lib_instance.set_debug(1);
 
-let tls_config = TlsConfig::new(
-    reqwless::TlsVersion::Tls1_2,
-    reqwless::Certificate::new(reqwless::X509::PEM(CERT)).unwrap(),
-    None, // optionally, add client certificate for mTLS
-    mbedtls_lib_instance.reference(),
-);
+let session_config = reqwless::ClientSessionConfig {
+    ca_chain: Some(reqwless::Certificate::new(reqwless::X509::PEM(CERT)).unwrap()),
+    min_version: reqwless::TlsVersion::Tls1_2,
+    ..Default::default()
+};
+let tls_config = TlsConfig::new(session_config, mbedtls_lib_instance.reference());
 
 let header_buf = [0; 1024];
 

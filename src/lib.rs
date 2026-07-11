@@ -84,7 +84,7 @@ impl From<embedded_tls::TlsError> for Error {
 
 /// Re-export those members since they're used for [client::TlsConfig].
 #[cfg(feature = "mbedtls-rs")]
-pub use mbedtls_rs::{Certificate, Credentials, TlsReference, TlsVersion, X509};
+pub use mbedtls_rs::{Certificate, ClientSessionConfig, Credentials, TlsReference, TlsVersion, X509};
 
 #[cfg(feature = "mbedtls-rs")]
 impl From<mbedtls_rs::SessionError> for Error {
